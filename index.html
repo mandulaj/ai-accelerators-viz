@@ -78,7 +78,8 @@
             'peak_accelerators_ieee_hpec_2020.csv',
             'peak_accelerators_ieee_hpec_2021.csv',
             'peak_accelerators_ieee_hpec_2022.csv',
-            'peak_accelerators_ieee_hpec_2023.csv'
+            'peak_accelerators_ieee_hpec_2023.csv',
+            'peak_accelerators_ieee_hpec_2025.csv'
         ];
 
         // Construct raw GitHub URLs for each file
@@ -134,7 +135,7 @@
             'Mixed': 'x',
             'Other': 'star'
         };
-        
+
         // Function to extract year from filename
         function extractYearFromFileName(fileName) {
             const match = fileName.match(/(\d{4})\.csv$/);
@@ -295,7 +296,7 @@
                                         info.PeakPerformanceReadable = val + ' OP/s';
                                     }
                                 }
-                                
+
                                 return info;
                             }),
                             hoverinfo: 'text',
