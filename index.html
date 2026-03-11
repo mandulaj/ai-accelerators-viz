@@ -4,31 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hardware Performance vs. Power</title>
-    <!-- Tailwind CSS CDN for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Plotly.js CDN for interactive plotting -->
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
-    <!-- D3.js for CSV parsing (includes d3-dsv functionality) -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        /* Custom styles for better aesthetics and responsiveness */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8; /* Light gray background */
+            background-color: #f0f4f8;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start; /* Changed to flex-start to allow scrolling if needed */
             min-height: 100vh;
             margin: 0;
             padding: 20px;
         }
         #plot-container {
             background-color: #ffffff;
-            border-radius: 1rem; /* Rounded corners */
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             padding: 1.5rem;
             width: 100%;
-            max-width: 2000px; /* Max width for larger screens */
+            max-width: 2000px;
             box-sizing: border-box;
         }
         #loading-message {
@@ -37,10 +33,9 @@
             font-size: 1.25rem;
             color: #4a5568;
         }
-        /* Ensure plotly div takes available space */
         #plot {
             width: 100%;
-            height: 1100px; /* Fixed height for the plot */
+            height: 1200px; /* Adjusted height slightly for controls */
         }
     </style>
 </head>
@@ -49,72 +44,62 @@
         <h1 class="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-6">
             Peak Performance vs. Power of Hardware for AI <a id="repo_link"> </a>
         </h1>
+        
+        <div id="controls" class="hidden flex flex-col gap-4 mb-6 justify-center items-center w-full">
+            <input type="text" id="searchInput" placeholder="Search Company, Product, Label..." class="border border-gray-300 rounded px-4 py-2 w-full md:w-1/2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <div class="flex flex-col md:flex-row gap-8 w-full justify-center">
+                <div id="yearFilters" class="flex flex-wrap gap-3 items-center">
+                    <span class="font-semibold text-gray-700">Years:</span>
+                    </div>
+                <div id="techFilters" class="flex flex-wrap gap-3 items-center">
+                    <span class="font-semibold text-gray-700">Technology:</span>
+                    </div>
+            </div>
+        </div>
+
         <div id="loading-message" class="text-gray-600">Loading data and generating plot...</div>
-        <div id="plot" class="hidden"></div> <!-- Plotly plot will be rendered here -->
+        <div id="plot" class="hidden"></div>
     </div>
 
     <script>
-        // Define the GitHub repository details and file paths
-        // Extract GitHub repo info from github.io URL if present, otherwise use defaults
         let GITHUB_REPO_OWNER = 'mandulaj';
         let GITHUB_REPO_NAME = 'ai-accelerators-viz';
         const GITHUB_BRANCH = 'main';
 
-        // If hosted on github.io, try to extract owner/repo from the URL
         const githubIoMatch = window.location.hostname.match(/^([^.]+)\.github\.io$/);
         if (githubIoMatch) {
             GITHUB_REPO_OWNER = githubIoMatch[1];
-            // Try to extract repo name from pathname (e.g. /repo-name/)
             const repoMatch = window.location.pathname.match(/^\/([^\/]+)\//);
-            if (repoMatch) {
-            GITHUB_REPO_NAME = repoMatch[1];
-            }
+            if (repoMatch) GITHUB_REPO_NAME = repoMatch[1];
         }
-
-        //
 
         const fileNames = [
-            'peak_accelerators_ieee_hpec_2019.csv',
-            'peak_accelerators_ieee_hpec_2020.csv',
-            'peak_accelerators_ieee_hpec_2021.csv',
-            'peak_accelerators_ieee_hpec_2022.csv',
-            'peak_accelerators_ieee_hpec_2023.csv',
-            'peak_accelerators_ieee_hpec_2025.csv'
+            'peak_accelerators_ieee_hpec_2019.csv', 'peak_accelerators_ieee_hpec_2020.csv',
+            'peak_accelerators_ieee_hpec_2021.csv', 'peak_accelerators_ieee_hpec_2022.csv',
+            'peak_accelerators_ieee_hpec_2023.csv', 'peak_accelerators_ieee_hpec_2025.csv'
         ];
 
-        // Construct raw GitHub URLs for each file
-        const filePaths = fileNames.map(name =>
-            `https://raw.githubusercontent.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/${GITHUB_BRANCH}/${name}`
-        );
+        const filePaths = fileNames.map(name => `https://raw.githubusercontent.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/${GITHUB_BRANCH}/${name}`);
 
-        // Generrate the repository link
         const repoUrl = `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`;
-        const repoLinkText = `View the repository on GitHub`;
-        const repoLink = document.getElementById('repo_link');
-        repoLink.innerHTML = `- <a href="${repoUrl}" class="text-blue-600 hover:underline" target="_blank">${repoLinkText}</a>`;
+        document.getElementById('repo_link').innerHTML = `- <a href="${repoUrl}" class="text-blue-600 hover:underline" target="_blank">View the repository on GitHub</a>`;
 
-        // Function to categorize technologies
         function categorizeTechnology(tech) {
-            if (tech === null || tech === undefined || String(tech).trim() === '') {
-                return null; // Return null for missing or empty values
-            }
+            if (!tech || String(tech).trim() === '') return null;
             const lowerTech = String(tech).toLowerCase();
-            if (lowerTech.includes('cpu') || lowerTech.includes('multicore') || lowerTech.includes('manycore')) {
-                return 'CPU';
-            } else if (lowerTech.includes('gpu')) {
-                return 'GPU';
-            } else if (lowerTech.includes('dataflow')) {
-                return 'dataflow';
-            } else {
-                return 'Others';
-            }
+            if (lowerTech.includes('cpu') || lowerTech.includes('multicore') || lowerTech.includes('manycore')) return 'CPU';
+            if (lowerTech.includes('gpu')) return 'GPU';
+            if (lowerTech.includes('neuromorphic')) return 'Neuromorphic';
+            if (lowerTech.includes('fpga')) return 'FPGA';
+            if (lowerTech.includes('analog')) return 'Analog';
+            if (lowerTech.includes('tensor')) return 'Tensor';
+            if (lowerTech.includes('dataflow')) return 'Dataflow';
+            return 'Others';
         }
 
-        // Function to categorize precision
         function categorizePrecision(prec) {
-            if (prec === null || prec === undefined || String(prec).trim() === '') {
-                return 'Other';
-            }
+            if (!prec || String(prec).trim() === '') return 'Other';
             const lowerPrec = String(prec).toLowerCase();
             if (lowerPrec.includes('fp32')) return 'FP32';
             if (lowerPrec.includes('fp16')) return 'FP16';
@@ -125,223 +110,203 @@
             return 'Other';
         }
 
-        // Define precision symbols mapping
-        const precisionSymbols = {
-            'FP32': 'circle',
-            'FP16': 'square',
-            'INT8': 'diamond',
-            'BF16': 'cross',
-            'TF32': 'triangle-up',
-            'Mixed': 'x',
-            'Other': 'star'
-        };
+        const precisionSymbols = { 'FP32': 'circle', 'FP16': 'square', 'INT8': 'diamond', 'BF16': 'cross', 'TF32': 'triangle-up', 'Mixed': 'x', 'Other': 'star' };
+        const categoryColors = { 'CPU': 'rgb(66, 135, 245)', 'GPU': 'rgb(52, 199, 89)', 'Dataflow': 'rgb(255, 140, 0)', 'Analog': 'rgb(255, 255, 0)', 'Tensor': 'rgb(106, 27, 154)', 'Neuromorphic': 'rgb(128, 0, 128)', 'FPGA': 'rgb(255, 0, 0)', 'Others': 'rgb(220, 53, 69)' };
 
-        // Function to extract year from filename
         function extractYearFromFileName(fileName) {
             const match = fileName.match(/(\d{4})\.csv$/);
             return match ? match[1] : 'N/A';
         }
 
-        // Function to fetch and process all CSV files
+        let globalData = []; // Store the full dataset
+
         async function loadAndProcessData() {
             try {
                 const allData = [];
                 for (const path of filePaths) {
                     const response = await fetch(path);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status} for ${path}`);
-                    }
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${path}`);
                     const csvText = await response.text();
                     const parsedData = d3.csvParse(csvText);
-                    const fileName = path.substring(path.lastIndexOf('/') + 1);
-                    const year = extractYearFromFileName(fileName);
+                    const year = extractYearFromFileName(path.substring(path.lastIndexOf('/') + 1));
+                    parsedData.forEach(row => row.Year = year);
+
+                    // ReferenceURL can have multiple URLs separated by semicolons; split these into an array (ReferenceURLs) and keep the first in ReferenceURL for backward compatibility
                     parsedData.forEach(row => {
-                        row.Year = year; // Add the year to each row
+                        if (row.ReferenceURL && row.ReferenceURL.includes(';')) {
+                            const urls = row.ReferenceURL.split(';').map(url => url.trim()).filter(url => url.startsWith('http'));
+                            row.ReferenceURLs = urls;
+                            row.ReferenceURL = urls.length > 0 ? urls[0] : '';
+                        } else {
+                            row.ReferenceURLs = row.ReferenceURL ? [row.ReferenceURL.trim()] : [];
+                        }
                     });
+
                     allData.push(...parsedData);
                 }
 
-                // Process the concatenated data
-                const processedData = allData.map(row => {
-                    // Ensure 'Power' and 'PeakPerformance' are numbers
+                globalData = allData.map(row => {
                     const power = parseFloat(row.Power);
                     const peakPerformance = parseFloat(row.PeakPerformance);
-
                     return {
                         ...row,
                         Power: isNaN(power) ? null : power,
                         PeakPerformance: isNaN(peakPerformance) ? null : peakPerformance,
                         TechnologyCategory: categorizeTechnology(row.Technology),
-                        PrecisionCategory: categorizePrecision(row.Precision) // Add categorized precision
+                        PrecisionCategory: categorizePrecision(row.Precision)
                     };
-                }).filter(row =>
-                    row.PeakPerformance !== null && row.Power !== null && row.PeakPerformance > 1000
-                );
+                }).filter(row => row.PeakPerformance !== null && row.Power !== null && row.PeakPerformance > 1000);
 
-                return processedData;
+                setupControls();
+                renderPlot(globalData);
 
             } catch (error) {
-                console.error("Error loading or processing data:", error);
-                document.getElementById('loading-message').innerText = 'Failed to load data. Please check console for details.';
-                return []; // Return empty array on error
+                console.error("Error loading data:", error);
+                document.getElementById('loading-message').innerText = 'Failed to load data.';
             }
         }
 
-        // Function to create and render the Plotly chart
-        async function createPlot() {
+function setupControls() {
+            const searchInput = document.getElementById('searchInput');
+            const yearFilters = document.getElementById('yearFilters');
+            const techFilters = document.getElementById('techFilters');
+
+            // Extract unique sorted values
+            const years = [...new Set(globalData.map(d => d.Year))].sort();
+            const techs = [...new Set(globalData.map(d => d.TechnologyCategory))].filter(Boolean).sort();
+
+            // Helper to generate checkboxes
+            const createCheckboxes = (container, items, className) => {
+                items.forEach(item => {
+                    const label = document.createElement('label');
+                    label.className = 'flex items-center space-x-1 cursor-pointer text-sm text-gray-700';
+                    label.innerHTML = `<input type="checkbox" value="${item}" class="${className} form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" checked> <span>${item}</span>`;
+                    container.appendChild(label);
+                });
+            };
+
+            createCheckboxes(yearFilters, years, 'year-cb');
+            createCheckboxes(techFilters, techs, 'tech-cb');
+
+            const filterData = () => {
+                const term = searchInput.value.toLowerCase();
+                
+                // Get arrays of currently checked values
+                const selectedYears = Array.from(document.querySelectorAll('.year-cb:checked')).map(cb => cb.value);
+                const selectedTechs = Array.from(document.querySelectorAll('.tech-cb:checked')).map(cb => cb.value);
+
+                const filtered = globalData.filter(d => {
+                    const matchSearch = !term || 
+                        (d.Company && d.Company.toLowerCase().includes(term)) ||
+                        (d.Product && d.Product.toLowerCase().includes(term)) ||
+                        (d.Label && d.Label.toLowerCase().includes(term));
+                    
+                    const matchYear = selectedYears.includes(d.Year);
+                    const matchTech = selectedTechs.includes(d.TechnologyCategory);
+                    
+                    return matchSearch && matchYear && matchTech;
+                });
+                
+                renderPlot(filtered);
+            };
+
+            // Attach event listeners
+            searchInput.addEventListener('input', filterData);
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.addEventListener('change', filterData);
+            });
+
+            document.getElementById('controls').classList.remove('hidden');
+        }
+
+        function renderPlot(dataFiltered) {
             const loadingMessage = document.getElementById('loading-message');
             const plotDiv = document.getElementById('plot');
 
-            const dataFiltered = await loadAndProcessData();
-
             if (dataFiltered.length === 0) {
-                loadingMessage.innerText = 'No data available to plot after filtering.';
+                Plotly.purge(plotDiv);
+                loadingMessage.innerText = 'No data matches your filters.';
+                loadingMessage.classList.remove('hidden');
+                plotDiv.classList.add('hidden');
                 return;
             }
 
-            // Calculate min/max for axes based on data points
-            const allPowers = dataFiltered.map(d => d.Power).filter(p => p !== null);
-            const allPerformances = dataFiltered.map(d => d.PeakPerformance).filter(p => p !== null);
+            loadingMessage.classList.add('hidden');
+            plotDiv.classList.remove('hidden');
+
+            const allPowers = globalData.map(d => d.Power).filter(p => p !== null); // Keep axes stable using global bounds
+            const allPerformances = globalData.map(d => d.PeakPerformance).filter(p => p !== null);
 
             const minPower = Math.min(...allPowers);
             const maxPower = Math.max(...allPowers);
             const minPerformance = Math.min(...allPerformances);
             const maxPerformance = Math.max(...allPerformances);
 
-            // Define a small padding for log scale axes
-            const logPadding = 0.1; // 10% padding on each side in log space
-
+            const logPadding = 0.1;
             const xMin = Math.log10(minPower) - logPadding;
             const xMax = Math.log10(maxPower) + logPadding;
             const yMin = Math.log10(minPerformance) - logPadding;
             const yMax = Math.log10(maxPerformance) + logPadding;
 
-
-            // Define colors for categories
-            const categoryColors = {
-                'CPU': 'rgb(66, 135, 245)',    // Blue
-                'GPU': 'rgb(52, 199, 89)',    // Green
-                'dataflow': 'rgb(255, 140, 0)', // Orange
-                'Others': 'rgb(220, 53, 69)'   // Red
-            };
-
             const plotTraces = [];
-
-            // Get unique categories and precisions
             const uniqueTechnologyCategories = [...new Set(dataFiltered.map(d => d.TechnologyCategory))].filter(Boolean).sort();
             const uniquePrecisions = [...new Set(dataFiltered.map(d => d.PrecisionCategory))].filter(Boolean).sort((a, b) => {
-                // Custom sort for precisions for consistent legend order
-                const order = ['FP32', 'FP16', 'BF16', 'INT8', 'TF32', 'Mixed', 'Other'];
+                const order = ['FP32','TF32', 'FP16', 'BF16', 'INT8', 'Mixed', 'Other'];
                 return order.indexOf(a) - order.indexOf(b);
             });
 
-            // Create a trace for each combination of TechnologyCategory and Precision
             for (const category of uniqueTechnologyCategories) {
                 for (const precision of uniquePrecisions) {
-                    const subset = dataFiltered.filter(d =>
-                        d.TechnologyCategory === category && d.PrecisionCategory === precision
-                    );
+                    const subset = dataFiltered.filter(d => d.TechnologyCategory === category && d.PrecisionCategory === precision);
 
                     if (subset.length > 0) {
+                        
+
                         plotTraces.push({
                             x: subset.map(d => d.Power),
                             y: subset.map(d => d.PeakPerformance),
                             mode: 'markers',
                             type: 'scatter',
-                            name: `${category} - ${precision}`, // Combined name for legend
-                            marker: {
-                                size: 10,
-                                color: categoryColors[category], // Color by TechnologyCategory
-                                symbol: precisionSymbols[precision] || 'circle', // Shape by Precision, default to circle
-                                line: {
-                                    color: 'rgba(0, 0, 0, 0.5)',
-                                    width: 1
-                                }
-                            },
-                            // Custom hover text to show product name, company, and precision
+                            name: `${category} - ${precision}`,
+                            marker: { size: 10, color: categoryColors[category], symbol: precisionSymbols[precision] || 'circle', line: { color: 'rgba(0, 0, 0, 0.5)', width: 1 } },
                             text: subset.map(d => {
-                                const info = {};
-                                if (d.Year) info.Year = d.Year;
-                                if (d.Product) info.Product = d.Product;
-                                if (d.Company) info.Company = d.Company;
-                                if (d.PeakPerformance) info.PeakPerformance = d.PeakPerformance;
-                                if (d.Precision) info.Precision = d.Precision;
-                                if (d.Power) info.Power = d.Power;
-                                if (d.Technology) info.Technology = d.Technology;
-                                if (d.IorT) info.IorT = d.IorT;
-                                if (d.FormFactor) info.FormFactor = d.FormFactor;
-                                if (d.PlotLocation) info.PlotLocation = d.PlotLocation;
-                                if (d.Hide) info.Hide = d.Hide;
-                                if (d.Updated) info.Updated = d.Updated;
-                                if (d.Notes && d.Notes.trim() !== '') info.Notes = d.Notes;
-                                if (d.ReferenceURL) info.ReferenceURL = d.ReferenceURL;
-                                if (d.Reference) info.Reference = d.Reference;
+                                const info = { ...d };
                                 info.Notes = (d.Notes && d.Notes.trim() !== '') ? `<b>Notes:</b> ${d.Notes}` : '';
-                                // Format PeakPerformance to readable units, including larger scales
                                 if (d.PeakPerformance) {
                                     const val = Number(d.PeakPerformance);
-                                    if (val >= 1e18) {
-                                        info.PeakPerformanceReadable = (val / 1e18).toFixed(2) + ' EOP/s'; // Exa
-                                    } else if (val >= 1e15) {
-                                        info.PeakPerformanceReadable = (val / 1e15).toFixed(2) + ' POP/s'; // Peta
-                                    } else if (val >= 1e12) {
-                                        info.PeakPerformanceReadable = (val / 1e12).toFixed(2) + ' TOP/s'; // Tera
-                                    } else if (val >= 1e9) {
-                                        info.PeakPerformanceReadable = (val / 1e9).toFixed(2) + ' GOP/s'; // Giga
-                                    } else if (val >= 1e6) {
-                                        info.PeakPerformanceReadable = (val / 1e6).toFixed(2) + ' MOP/s'; // Mega
-                                    } else if (val >= 1e3) {
-                                        info.PeakPerformanceReadable = (val / 1e3).toFixed(2) + ' KOP/s'; // Kilo
-                                    } else {
-                                        info.PeakPerformanceReadable = val + ' OP/s';
-                                    }
+                                    if (val >= 1e18) info.PeakPerformanceReadable = (val / 1e18).toFixed(2) + ' EOP/s';
+                                    else if (val >= 1e15) info.PeakPerformanceReadable = (val / 1e15).toFixed(2) + ' POP/s';
+                                    else if (val >= 1e12) info.PeakPerformanceReadable = (val / 1e12).toFixed(2) + ' TOP/s';
+                                    else if (val >= 1e9) info.PeakPerformanceReadable = (val / 1e9).toFixed(2) + ' GOP/s';
+                                    else if (val >= 1e6) info.PeakPerformanceReadable = (val / 1e6).toFixed(2) + ' MOP/s';
+                                    else if (val >= 1e3) info.PeakPerformanceReadable = (val / 1e3).toFixed(2) + ' KOP/s';
+                                    else info.PeakPerformanceReadable = val + ' OP/s';
                                 }
-
                                 return info;
                             }),
                             hoverinfo: 'text',
-                            hovertemplate:
-                                [
-                                    '<b>Product:</b> %{text.Product} (%{text.Year})',
-                                    '<b>Company:</b> %{text.Company}',
-                                    '<b>Peak Performance:</b> %{text.PeakPerformanceReadable}',
-                                    '<b>Precision:</b> %{text.Precision}',
-                                    '<b>Power:</b> %{text.Power} W',
-                                    '%{text.Notes}',
-                                    '<a href="%{text.ReferenceURL}" target="_blank">Reference</a>'
-                                ]
-                                .filter(line => line !== '')
-                                .join('<br>') +
-                                '<extra></extra>'
+                            hovertemplate: [
+                                '<b>Product:</b> %{text.Product} (%{text.Year})', '<b>Company:</b> %{text.Company}',
+                                '<b>Peak Performance:</b> %{text.PeakPerformanceReadable}', '<b>Precision:</b> %{text.Precision}',
+                                '<b>Technology:</b> %{text.Technology}',
+                                '<b>Power:</b> %{text.Power} W', '%{text.Notes}', '<a href="%{text.ReferenceURL}" target="_blank">Reference</a>'
+                                
+                            ].filter(line => line !== '').join('<br>') + '<extra></extra>'
                         });
                     }
                 }
             }
 
-            // Add diagonal lines for Ops/W ratio
-            const opsPerWattRatios = [1e9,1e10,1e11, 1e12, 1e13, 1e14]; // 1 TOP/W, 10 TOP/W, 100 TOP/W, etc.
-
-            // Helper function to format ratio labels
-            function formatRatioLabel(ratio) {
-                if (ratio >= 1e12) {
-                    return `${ratio / 1e12} TOP/W`;
-                } else if (ratio >= 1e9) {
-                    return `${ratio / 1e9} GOP/W`; // GigaOps/W
-                }
-                return `${ratio} Ops/W`;
-            }
+            const opsPerWattRatios = [1e9, 1e10, 1e11, 1e12, 1e13, 1e14];
+            const formatRatioLabel = (ratio) => ratio >= 1e12 ? `${ratio / 1e12} TOP/W` : ratio >= 1e9 ? `${ratio / 1e9} GOP/W` : `${ratio} Ops/W`;
 
             opsPerWattRatios.forEach(ratio => {
                 const lineX = [];
-                for (let p = Math.pow(10, xMin); p <= Math.pow(10, xMax); p *= 1.1) {
-                    lineX.push(p);
-                }
+                for (let p = Math.pow(10, xMin); p <= Math.pow(10, xMax); p *= 1.1) lineX.push(p);
                 lineX.push(Math.pow(10, xMax));
 
                 const lineY = lineX.map(power => power * ratio);
-
-                const filteredLineX = [];
-                const filteredLineY = [];
+                const filteredLineX = [], filteredLineY = [];
                 for (let i = 0; i < lineX.length; i++) {
                     if (lineY[i] >= Math.pow(10, yMin) && lineY[i] <= Math.pow(10, yMax)) {
                         filteredLineX.push(lineX[i]);
@@ -350,106 +315,45 @@
                 }
 
                 if (filteredLineX.length > 1) {
-                    plotTraces.push({
-                        x: filteredLineX,
-                        y: filteredLineY,
-                        mode: 'lines',
-                        type: 'scatter',
-                        name: formatRatioLabel(ratio),
-                        line: {
-                            color: 'rgba(128, 128, 128, 0.5)',
-                            dash: 'dash',
-                            width: 1
-                        },
-                        hoverinfo: 'skip',
-                        showlegend: false
-                    });
+                    plotTraces.push({ x: filteredLineX, y: filteredLineY, mode: 'lines', type: 'scatter', name: formatRatioLabel(ratio), line: { color: 'rgba(128, 128, 128, 0.5)', dash: 'dash', width: 1 }, hoverinfo: 'skip', showlegend: false });
                 }
             });
 
-
             const layout = {
-                xaxis: {
-                    title: {
-                        text: 'Peak Power (W)',
-                        font: { size: 14 }
-                    },
-                    type: 'log',
-                    range: [xMin, xMax],
-                    gridcolor: '#e2e8f0',
-                    linecolor: '#cbd5e1',
-                    linewidth: 1
-                },
-                yaxis: {
-                    title: {
-                        text: 'Peak Performance (Op/s)',
-                        font: { size: 14 }
-                    },
-                    type: 'log',
-                    range: [yMin, yMax],
-                    gridcolor: '#e2e8f0',
-                    linecolor: '#cbd5e1',
-                    linewidth: 1
-                },
-                title: {
-                    text: 'Peak Performance vs. Power of Hardware for AI by CPU, GPU, and Others',
-                    font: { size: 18, color: '#333' },
-                    x: 0.5,
-                    xanchor: 'center'
-                },
+                xaxis: { title: { text: 'Peak Power (W)', font: { size: 14 } }, type: 'log', range: [xMin, xMax], gridcolor: '#e2e8f0', linecolor: '#cbd5e1', linewidth: 1 },
+                yaxis: { title: { text: 'Peak Performance (Op/s)', font: { size: 14 } }, type: 'log', range: [yMin, yMax], gridcolor: '#e2e8f0', linecolor: '#cbd5e1', linewidth: 1 },
+                title: { text: 'Peak Performance vs. Power of Hardware for AI by CPU, GPU, and Others', font: { size: 18, color: '#333' }, x: 0.5, xanchor: 'center' },
                 hovermode: 'closest',
-                legend: {
-                    orientation: 'h', // Horizontal legend
-                    yanchor: 'bottom',
-                    y: 1.02,
-                    xanchor: 'right',
-                    x: 1,
-                    bgcolor: 'rgba(255, 255, 255, 0.8)',
-                    bordercolor: '#ccc',
-                    borderwidth: 1,
-                    font: { size: 10 } // Slightly smaller font for potentially more entries
+                legend: { 
+                    orientation: 'h',   // Horizontal orientation
+                    yanchor: 'top', 
+                    y: -0.15,           // Negative value pushes it below the x-axis
+                    xanchor: 'center', 
+                    x: 0.5,             // Centered horizontally
+                    bgcolor: 'rgba(255, 255, 255, 0.8)', 
+                    bordercolor: '#ccc', 
+                    borderwidth: 1, 
+                    font: { size: 10 } 
                 },
-                margin: {
-                    l: 80,
-                    r: 50,
-                    b: 80,
-                    t: 100,
-                    pad: 4
-                },
-                paper_bgcolor: '#ffffff',
-                plot_bgcolor: '#ffffff',
-                font: {
-                    family: 'Inter, sans-serif',
-                    color: '#333'
-                },
+                margin: { l: 80, r: 50, b: 80, t: 100, pad: 4 },
+                paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', font: { family: 'Inter, sans-serif', color: '#333' },
                 autosize: true
             };
 
-            loadingMessage.classList.add('hidden');
-            plotDiv.classList.remove('hidden');
+            // Use React to efficiently update rather than redrawing from scratch
+            Plotly.react('plot', plotTraces, layout, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'] });
 
-            Plotly.newPlot('plot', plotTraces, layout, {
-                responsive: true,
-                displayModeBar: true,
-                modeBarButtonsToRemove: ['lasso2d', 'select2d']
-            });
-
-            // Add click event listener to the plot
+            // Re-attach listener in case it's a new plot
+            plotDiv.removeAllListeners('plotly_click');
             plotDiv.on('plotly_click', function(data) {
                 if (data.points.length > 0) {
-                    const point = data.points[0];
-                    const referenceURL = point.text.ReferenceURL; // Access the ReferenceURL from the custom text object
-
-                    if (referenceURL && referenceURL.startsWith('http')) { // Ensure it's a valid URL
-                        window.open(referenceURL, '_blank'); // Open in a new tab
-                    } else {
-                        console.warn("No valid ReferenceURL found for the clicked point:", point);
-                    }
+                    const referenceURL = data.points[0].text.ReferenceURL;
+                    if (referenceURL && referenceURL.startsWith('http')) window.open(referenceURL, '_blank');
                 }
             });
         }
 
-        window.onload = createPlot;
+        window.onload = loadAndProcessData;
     </script>
 </body>
 </html>
